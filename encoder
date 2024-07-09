@@ -1,0 +1,65 @@
+//Autor: Mikael Mota Feitosa Sales
+
+// --- Variáveis Globais --- 
+int infraVermelho = 2;
+int rpm;
+volatile byte pulsos;
+unsigned long timeold;
+float v=0;
+
+
+//Altere o numero abaixo de acordo com o seu disco encoder
+unsigned int pulsos_por_volta = 20;
+
+// ========================================================================================================
+// --- Interrupção ---
+void contador()
+{
+
+  pulsos++;
+}
+
+
+// ========================================================================================================
+// --- Configurações Iniciais ---
+void setup()
+{
+  Serial.begin(115200);
+ 
+
+  pinMode(infraVermelho, INPUT);
+
+  //Interrupcao 0 - pino digital infraVermelho
+  //Aciona o contador a cada pulso
+  attachInterrupt(0, contador, RISING);
+  pulsos  = 0;
+  rpm     = 0;
+  timeold = 0;
+
+} //end setup
+
+
+// ========================================================================================================
+// --- Loop Infinito ---
+void loop()
+{
+ 
+  //Atualiza contador a cada segundo
+  if (millis() - timeold >= 1000)
+  {
+    //Desabilita interrupcao durante o calculo
+    detachInterrupt(0);
+    rpm = (60 * 1000 / pulsos_por_volta ) / (millis() - timeold) * pulsos;
+    timeold = millis();
+    pulsos = 0;
+
+    //m/s conversão
+    v = (0.0038*rpm) + 1.479;
+      Serial.print("M/S = "); 
+      Serial.println(v, 2);
+  
+    attachInterrupt(0, contador, RISING);//2.40 ~ 2.60
+    
+  }
+ delay(500);
+} //end loop

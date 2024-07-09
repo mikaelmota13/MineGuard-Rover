@@ -1,0 +1,63 @@
+#include <ESP8266WiFi.h>
+#include <ESP8266WebServer.h>
+
+const char* ssid = "brisa-3805226";
+const char* password = "4rgg8y40";
+
+ESP8266WebServer server(80);
+
+void direcao(int x, int y){
+  if(x<= 1900 && y > 4000){
+    Serial.println("direita");
+  }else if(x>1800 && y == 0){
+    Serial.println("esquerda");
+  }else if(x>4000 && y <=2000){
+    Serial.println("frente");
+  }else if(x==0 && y >=1800){
+  Serial.println("atras");
+  }
+}
+
+void handleUpdate() {
+  if (server.hasArg("x") && server.hasArg("y") && server.hasArg("button")) {
+    String xValue = server.arg("x");
+    String yValue = server.arg("y");
+    String buttonState = server.arg("button");
+
+    float x = xValue.toFloat();
+    float y = yValue.toFloat();
+    direcao(x, y);
+   
+    Serial.print("X: ");
+    Serial.print(xValue);
+    Serial.print(" Y: ");
+    Serial.print(yValue); 
+    Serial.print(" Button: ");
+    Serial.println(buttonState);
+
+    // Aqui você pode adicionar o código para controlar dispositivos conectados ao ESP8266
+    // com base nos valores recebidos.
+
+    server.send(200, "text/plain", "Dados recebidos");
+  } else {
+    server.send(400, "text/plain", "Dados ausentes");
+  }
+}
+
+void setup() {
+  Serial.begin(115200);
+  
+  WiFi.begin(ssid, password);
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.println("Conectando ao WiFi...");
+  }
+  Serial.println("Conectado ao WiFi");
+  Serial.println(WiFi.localIP());
+  server.on("/update", handleUpdate);
+  server.begin();
+}
+
+void loop() {
+  server.handleClient();
+}

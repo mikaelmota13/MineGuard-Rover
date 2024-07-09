@@ -1,0 +1,49 @@
+#include <WiFi.h>
+#include <HTTPClient.h>
+
+const char* ssid = "brisa-3805226";
+const char* password = "4rgg8y40";
+
+const char* serverName = "http://192.168.0.5/update";
+
+int xPin = 32; // Pino ADC para o eixo X
+int yPin = 33; // Pino ADC para o eixo Y
+int buttonPin = 25; // Pino digital para o botão
+
+void setup() {
+  Serial.begin(115200);
+  pinMode(buttonPin, INPUT_PULLUP);
+  
+  WiFi.begin(ssid, password);
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.println("Conectando ao WiFi...");
+  }
+  Serial.println("Conectado ao WiFi");
+}
+
+void loop() {
+  int xValue = analogRead(xPin);
+  int yValue = analogRead(yPin);
+  int buttonState = digitalRead(buttonPin);
+  
+  if (WiFi.status() == WL_CONNECTED) {
+    HTTPClient http;
+    http.begin(serverName);
+
+    String postData = "x=" + String(xValue) + "&y=" + String(yValue) + "&button=" + String(buttonState);
+    http.addHeader("Content-Type", "application/x-www-form-urlencoded");
+    
+    int httpResponseCode = http.POST(postData);
+    if (httpResponseCode > 0) {
+      String response = http.getString();
+      Serial.println(response);
+    } else {
+      Serial.print("Erro no envio do POST: ");
+      Serial.println(httpResponseCode);
+    }
+    http.end();
+  }
+  delay(100);
+}
+

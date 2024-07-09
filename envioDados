@@ -1,0 +1,119 @@
+#include <ESP8266WiFi.h>
+#include <WiFiClientSecure.h>
+
+const char* ssid = "brisa-3805226";
+const char* password = "4rgg8y40";  
+
+const char* host = "script.google.com";
+const int httpsPort = 443;
+
+WiFiClientSecure client;
+
+String appscriptID = "AKfycbwRePMxNz9XVcus7Fs7lqFzPYNKCv_6B8KWnEFaAJF5kW5-5PE-gMF_-oOmObQRaPEEvg";
+
+void setup() {
+    Serial.begin(115200);
+    delay(500);
+
+    WiFi.begin(ssid, password);
+    Serial.println("");
+
+    Serial.print("Connecting");
+    while (WiFi.status() != WL_CONNECTED) {
+        delay(500);
+        Serial.print(".");
+    }
+
+    Serial.println("");
+    Serial.print("Successfully connected to: ");
+    Serial.println(ssid);
+    Serial.print("IP address: ");
+    Serial.println(WiFi.localIP());
+    Serial.print("Mac address: ");
+    Serial.println(WiFi.macAddress());
+
+    client.setInsecure(); // Não verifique o certificado
+}
+
+void loop() {
+    String nome = "Sales";
+    int valor = random(10, 50);
+
+    Serial.println(nome);
+    Serial.println(valor);
+    Serial.println(WiFi.macAddress());
+
+    sendData(nome, valor); // Chama a sub-rotina sendData
+    delay(2000);
+}
+
+// Sub-rotina para enviar dados ao Google Sheets
+void sendData(String nome, int valor) {
+    Serial.println("==");
+    Serial.print("connecting to ");
+    Serial.println(host);
+
+    if (!client.connect(host, httpsPort)) {
+        Serial.println("connection failed");
+        return;
+    }
+
+    String url = "/macros/s/" + appscriptID + "/exec?nome=" + nome + "&valor=" + valor;
+    Serial.print("requesting URL: ");
+    Serial.println(url);
+
+    client.print(String("GET ") + url + " HTTP/1.1\r\n" +
+                 "Host: " + host + "\r\n" + 
+                 "User-Agent: ESP8266\r\n" + 
+                 "Connection: close\r\n\r\n");
+
+    Serial.println("request sent");
+
+    // Espera pela resposta do servidor
+    while (client.connected()) { 
+        if (client.available()) {
+            String line = client.readStringUntil('\n');
+            Serial.println(line);
+            if (line.startsWith("Location: ")) {
+                String redirectUrl = line.substring(10);
+                redirectUrl.trim();
+                handleRedirect(redirectUrl);
+                return;
+            }
+        }
+    }
+
+    Serial.println("closing connection");
+    Serial.println("==============");
+    Serial.println();
+}
+
+// Função para lidar com redirecionamentos
+void handleRedirect(String url) {
+    Serial.println("Handling redirect to:");
+    Serial.println(url);
+
+    if (!client.connect(host, httpsPort)) {
+        Serial.println("connection failed");
+        return;
+    }
+
+    client.print(String("GET ") + url + " HTTP/1.1\r\n" +
+                 "Host: " + host + "\r\n" + 
+                 "User-Agent: ESP8266\r\n" + 
+                 "Connection: close\r\n\r\n");
+
+    Serial.println("request sent");
+
+    // Espera pela resposta do servidor
+    while (client.connected()) { 
+        if (client.available()) {
+            String line = client.readStringUntil('\n');
+            Serial.println(line);
+        }
+    }
+
+    Serial.println("closing connection");
+    Serial.println("==============");
+    Serial.println();
+}

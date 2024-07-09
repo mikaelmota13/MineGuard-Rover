@@ -1,0 +1,183 @@
+//configurações blynk
+#define BLYNK_TEMPLATE_ID "TMPL2viC3b3s5"
+#define BLYNK_TEMPLATE_NAME "IoT  Estação metereologica"
+#define BLYNK_AUTH_TOKEN "eA4OUYST55wY3hmBaN5IL3phRVYiYt7z"
+#define BLYNK_PRINT Serial
+
+#define MQ2 A0//sensor de gás MQ2
+#define SEALEVELPRESSURE_HPA (1013.25) //constante para altitude
+
+#include <ESP8266WiFi.h> //wifi esp
+#include <BlynkSimpleEsp8266.h>//conecção esp blynk
+#include <WiFiClientSecure.h> //bliblioteca usada para upar dados no google sheets
+
+//bm280 bibliotecas
+#include <Wire.h>
+#include <Adafruit_Sensor.h>
+#include <Adafruit_BME280.h>
+
+Adafruit_BME280 bme;//objeto do tipo bme; utiliza portas SCL e SDA no esp8266.
+
+//login da rede
+//char ssid[] = "ENGINELAB";
+//char pass[] = "3ng1n320@@";  
+
+char ssid[] = "brisa-3805226";
+char pass[] = "4rgg8y40";  
+
+const int sensorPin = D5; // Pino de entrada do sensor infravermelho (ajuste conforme necessário)
+volatile int counter = 0; //contador de interrupções
+
+//parametros de acesso google sheet
+const char* host = "script.google.com";
+const int httpsPort = 443;
+
+WiFiClientSecure client;
+
+//chave de usuario google sheet
+String appscriptID = "AKfycbxQv4h3R46U3Z3nm5kv2ZUkxkVfGL0O8LuDs2zaIjGa9ABW4XA9KsZ7rGCnNIsHGwCc";
+
+//função para contar pulsos
+void ICACHE_RAM_ATTR countPulses() {
+  counter++;
+}
+
+void setup() {
+  Serial.begin(115200);
+
+  if(!bme.begin(0x76)){
+    Serial.println("Sensor BME280 não encontrado!");
+    while(1);
+  }
+
+  pinMode(sensorPin, INPUT);
+  attachInterrupt(digitalPinToInterrupt(sensorPin), countPulses, RISING);
+
+  pinMode(MQ2, INPUT);
+
+  WiFi.begin(ssid, pass);
+    Serial.println("");
+
+    Serial.print("Connecting");
+    while (WiFi.status() != WL_CONNECTED) {
+        delay(500);
+        Serial.print(".");
+    }
+
+    Serial.println("");
+    Serial.print("Successfully connected to: ");
+    Serial.println(ssid);
+    Serial.print("IP address: ");
+    Serial.println(WiFi.localIP());
+    Serial.print("Mac address: ");
+    Serial.println(WiFi.macAddress());
+
+    Blynk.begin(BLYNK_AUTH_TOKEN, ssid, pass);
+
+    client.setInsecure(); // Não verifique o certificado
+}
+
+void loop() {
+  if(millis()%3000==0){
+    float temp = bme.readTemperature();
+    float umid = bme.readHumidity();
+    float pres = bme.readPressure() / 100.0F;
+    float alti = bme.readAltitude(SEALEVELPRESSURE_HPA);
+
+    Blynk.virtualWrite(V0, alti);
+    Blynk.virtualWrite(V1, temp);
+    Blynk.virtualWrite(V2, pres);
+    Blynk.virtualWrite(V3, umid);
+
+    Serial.print("temp: ");
+    Serial.println(temp);
+    Serial.print("umid: ");
+    Serial.println(umid);
+    Serial.print("pres: ");
+    Serial.println(pres);
+    Serial.print("alti: ");
+    Serial.println(alti);
+
+    float speed = (counter / 20.0) * 60.0; // Calcula a velocidade em RPM
+    Serial.printf("Speed: %.2f RPM\n", speed);
+    counter = 0;
+
+    int gasValue = analogRead(MQ2);
+    Serial.print("MQ2 sensor AO value: ");
+    Serial.println(gasValue);
+
+    sendData(temp, umid, pres, alti, speed, gasValue);
+    delay(2000);
+  }
+  Blynk.run();
+}
+
+void sendData(float temp, float umid, float pres, float alti, float speed, float gasValue) {
+    Serial.println("==");
+    Serial.print("connecting to ");
+    Serial.println(host);
+
+    if (!client.connect(host, httpsPort)) {
+        Serial.println("connection failed");
+        return;
+    }
+
+    String url = "/macros/s/" + appscriptID + "/exec?temperatura=" + temp + "&umidade=" + umid + "&pressao=" + pres +
+    "&altitude=" + alti + "&vento=" + speed + "&gas=" + gasValue;
+    Serial.print("requesting URL: ");
+    Serial.println(url);
+
+    client.print(String("GET ") + url + " HTTP/1.1\r\n" +
+                 "Host: " + host + "\r\n" + 
+                 "User-Agent: ESP8266\r\n" + 
+                 "Connection: close\r\n\r\n");
+
+    Serial.println("request sent");
+
+    // Espera pela resposta do servidor
+    while (client.connected()) { 
+        if (client.available()) {
+            String line = client.readStringUntil('\n');
+            Serial.println(line);
+            if (line.startsWith("Location: ")) {
+                String redirectUrl = line.substring(10);
+                redirectUrl.trim();
+                handleRedirect(redirectUrl);
+                return;
+            }
+        }
+    }
+
+    Serial.println("closing connection");
+    Serial.println("==============");
+    Serial.println();
+}
+
+void handleRedirect(String url) {
+    Serial.println("Handling redirect to:");
+    Serial.println(url);
+
+    if (!client.connect(host, httpsPort)) {
+        Serial.println("connection failed");
+        return;
+    }
+
+    client.print(String("GET ") + url + " HTTP/1.1\r\n" +
+                 "Host: " + host + "\r\n" + 
+                 "User-Agent: ESP8266\r\n" + 
+                 "Connection: close\r\n\r\n");
+
+    Serial.println("request sent");
+
+    // Espera pela resposta do servidor
+    while (client.connected()) { 
+        if (client.available()) {
+            String line = client.readStringUntil('\n');
+            Serial.println(line);
+        }
+    }
+
+    Serial.println("closing connection");
+    Serial.println("==============");
+    Serial.println();
+}
